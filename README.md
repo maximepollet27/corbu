@@ -13,7 +13,7 @@ The design parameters are generated using a conditional VAE (cVAE), construct th
 
 To install a local copy of the project, run:
 ```
-git clone
+git clone https://github.com/maximepollet27/corbu.git
 cd corbu
 ```
 
