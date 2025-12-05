@@ -31,6 +31,8 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+Finally, place the data.zip folder (to be requested to the repository owner) at the root level and unzip it.
+
 ## Usage
 
 To run the full pipeline from the project root:
