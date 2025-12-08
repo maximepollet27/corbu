@@ -1,0 +1,45 @@
+{
+    "parcel_length": 50.0,
+    "parcel_width": 30.0,
+    "latitude_north_deg": 45.19160172269835,
+    "longitude_east_deg": 5.717386779367178,
+    "starting_stringdate" : "01/01/2023",
+    "ending_stringdate" : "01/01/2024",
+    "location" : "Grenoble",
+    "albedo" : 0.1,
+    "pollution" : 0.1,
+    "number_of_levels" : 4,
+    "ground_temperature" : 13,
+    "side_masks" : {
+        "sidemask_0": {
+            "x_center": 0.0,
+            "y_center" : -56,
+            "width" : 140.0,
+            "height": 25.0,
+            "elevation": 0.0,
+            "exposure_deg": 90.0,
+            "slope_deg": 90.0,
+            "normal_rotation_angle_deg": 0.0
+        },
+        "sidemask_1": {
+            "x_center": -37.0,
+            "y_center" : 0.0,
+            "width" : 60.0,
+            "height": 10.0,
+            "elevation": 0.0,
+            "exposure_deg": 0.0,
+            "slope_deg": 90.0,
+            "normal_rotation_angle_deg": 0.0
+        },
+        "sidemask_2": {
+            "x_center": 60.0,
+            "y_center" : 0.0,
+            "width" : 20.0,
+            "height": 45.0,
+            "elevation": 0.0,
+            "exposure_deg": 0.0,
+            "slope_deg": 90.0,
+            "normal_rotation_angle_deg": 0.0
+        }
+    }
+}

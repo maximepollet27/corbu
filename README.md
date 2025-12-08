@@ -40,10 +40,11 @@ To run the full pipeline from the project root:
 python src\corbu\main.py
 ```
 Additional arguments can be added to specify custom targets (the above command uses default values):
-- ```--parcel_width``` and ```--parcel_length``` describe the dimensions of a rectangular parcel (default width = 30, length = 50).
 - ```--floor_area``` describes the target total floor area to generate (default 2000 m2). Must be comprised between 800 and 6000.
 - ```--max_gwp``` describes the target GWP100 per m2 for the structure (default 200 kgCO2/m2). Must be comprised between 150 and 210.
 - ```--n_solutions``` describes the number of solutions to generate (default 3).
+
+A context (location, parcel dimensions, etc) must also be provided as a json file, in data/context/<context_file.json>. A default context is provided for testing.
 
 ## Repository structure
 

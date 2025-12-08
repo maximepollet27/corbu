@@ -1,4 +1,6 @@
 src/corbu/__pycache__
-data/*
+data/ml_model/*
+data/predim_struct_elements/*
+data/prerun_lca/*
 venv/
 data.zip

@@ -1,6 +1,7 @@
 import tqdm
 import time
 import argparse
+import json
 from pathlib import Path
 from pprint import pprint
 import warnings
@@ -18,6 +19,14 @@ from cvae_generation import *
 from geometry import *
 from structure import *
 from lca import *
+
+def load_context(root_path, context_name="default_context.json"):
+    
+    # Load context from file
+    with open(root_path.joinpath(f"./data/context/{context_name}")) as json_file:
+        context = json.load(json_file)
+    
+    return context
 
 def generate_structures(
         parcel_length, parcel_width, floor_area_target, max_gwp, path, n_sol=15
@@ -216,34 +225,28 @@ def structural_design(generated_structures, path, keep_sol=10):
 
     return generated_structures, material_quantities, floor_compositions
 
-def thermal_simulation(generated_structures, floor_compositions, plot=False):
+def thermal_simulation(
+        generated_structures, floor_compositions, context, plot=False
+    ):
 
     # Define context
     context_data: ContextData = ContextData(
-        latitude_north_deg=45.19160172269835,
-        longitude_east_deg=5.717386779367178,
-        starting_stringdate='01/01/2023',
-        ending_stringdate='01/01/2024',
-        location='Grenoble',
-        albedo=0.1,
-        pollution=0.1,
-        number_of_levels=4,
-        ground_temperature=13,
+        latitude_north_deg=context["latitude_north_deg"],
+        longitude_east_deg=context["longitude_east_deg"],
+        starting_stringdate=context["starting_stringdate"],
+        ending_stringdate=context["ending_stringdate"],
+        location=context["location"],
+        albedo=context["albedo"],
+        pollution=context["pollution"],
+        number_of_levels=context["number_of_levels"],
+        ground_temperature=context["ground_temperature"],
         side_masks=[
             SideMaskData(
-                x_center=0.0, y_center=-56, width=140., height=25.,
-                elevation=0.0, exposure_deg=90.0, slope_deg=90.0,
-                normal_rotation_angle_deg=0.0,
-            ), # sud
-            SideMaskData(
-                x_center=-37., y_center=0., width=60., height=10.,
-                elevation=0.0, exposure_deg=0.0, slope_deg=90.0,
-                normal_rotation_angle_deg=0.0,), # ouest
-            SideMaskData(
-                x_center=60., y_center=0., width=20., height=45.,
-                elevation=0.0, exposure_deg=0.0, slope_deg=90.0,
-                normal_rotation_angle_deg=0.0,
-            ) # est
+                x_center=v["x_center"], y_center=v["y_center"],
+                width=v["width"], height=v["height"],
+                elevation=v["elevation"], exposure_deg=v["exposure_deg"], slope_deg=v["slope_deg"],
+                normal_rotation_angle_deg=v["normal_rotation_angle_deg"],
+            ) for v in context["side_masks"].values()
         ]
     )
 
@@ -485,16 +488,17 @@ def plot_lca_uncertainties(df, indicator="GWP100", result_set="total"):
     plt.tight_layout()
     plt.show()
 
-def run_pipeline(
-    parcel_length, parcel_width, floor_target, max_gwp, root_path, n_sol
-    ):
+def run_pipeline(floor_target, max_gwp, root_path, n_sol):
+
+    # 0. Load context
+    context = load_context(root_path)
 
     # 1. Generate n_sol * 2 solutions using cVAE
     print("Generating structures with cVAE")
     start_time = time.time()
     generated_designs = generate_structures(
-        parcel_length, parcel_width, floor_target, max_gwp, root_path,
-        n_sol=n_sol * 2 # Generate more solutions than needed at first
+        context["parcel_length"], context["parcel_width"], floor_target,
+        max_gwp, root_path, n_sol=n_sol * 2 # Generate more solutions than needed at first
     )
     print(f"Generation time = {time.time() - start_time}")
 
@@ -510,7 +514,7 @@ def run_pipeline(
     start_time = time.time()
     print("Performing thermal simulation")
     hvac_consumptions = thermal_simulation(
-        generated_designs, floor_compos, plot=True
+        generated_designs, floor_compos, context, plot=True
     )
     print(f"Thermal simulation time = {time.time() - start_time}")
 
@@ -526,23 +530,16 @@ def main():
 
     # Collect inputs from command line
     parser = argparse.ArgumentParser()
-    parser.add_argument("--parcel_length", type=float, default=50.)
-    parser.add_argument("--parcel_width", type=float, default=30.)
     parser.add_argument("--floor_area", type=float, default=2000.)
     parser.add_argument("--max_gwp", type=float, default=200.)
     parser.add_argument("--n_solutions", type=int, default=3)
     args = parser.parse_args()
-    PARCEL_LENGTH = args.parcel_length
-    PARCEL_WIDTH = args.parcel_width
     FLOOR_AREA_TARGET = args.floor_area
     MAX_GWP = args.max_gwp
     N_SOL = args.n_solutions
     ROOT_PATH = Path(__file__).resolve().parents[2]
 
-    results = run_pipeline(
-        PARCEL_LENGTH, PARCEL_WIDTH, FLOOR_AREA_TARGET,
-        MAX_GWP, ROOT_PATH, N_SOL
-    )
+    results = run_pipeline(FLOOR_AREA_TARGET,MAX_GWP, ROOT_PATH, N_SOL)
 
 if __name__ == "__main__":
     main()
