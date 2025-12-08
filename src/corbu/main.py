@@ -2,6 +2,7 @@ import tqdm
 import time
 import argparse
 from pathlib import Path
+from pprint import pprint
 import warnings
 warnings.filterwarnings("ignore")
 import seaborn as sns
@@ -65,6 +66,7 @@ def structural_design(generated_structures, path, keep_sol=10):
 
     # Iterate over each design proposed
     material_quantities = {}
+    floor_compositions = {}
     for i in tqdm.tqdm(range(len(generated_structures))):
 
         input_params = {
@@ -153,6 +155,48 @@ def structural_design(generated_structures, path, keep_sol=10):
             structure.compute_material_quantities()
             material_quantities[i] = structure.material_quantities
 
+            # Work out floor compositions
+            average_floor_thick = np.mean(
+                [f.height for f in structure.all_floors.values()]
+            ).item()
+            average_found_floor_thick = np.mean(
+                [f.height for f in structure.all_foundation_floors.values()]
+            ).item()
+            if input_params["floor_material"] == "Coulee-En-Place":
+                level_composition = (
+                    ('plaster', 1e-2),
+                    ('polystyrene', 2e-2),
+                    ("concrete", average_floor_thick),
+                    ('polystyrene', 2e-2),
+                    ('plaster', 1e-2)
+                )
+            elif input_params["floor_material"] == "CLT":
+                level_composition = (
+                    ('plaster', 1e-2),
+                    ('polystyrene', 2e-2),
+                    ("concrete", 0.06),
+                    ("wood", average_floor_thick - 0.06),
+                    ('polystyrene', 2e-2),
+                    ('plaster', 1e-2)
+                )
+            elif input_params["floor_material"] == "Collaborant":
+                level_composition = (
+                    ('plaster', 1e-2),
+                    ('polystyrene', 2e-2),
+                    ("concrete", average_floor_thick - 0.00075),
+                    ("stainless steel", 0.00075),
+                    ('polystyrene', 2e-2),
+                    ('plaster', 1e-2)
+                )
+            floor_compositions[i] = {
+                "groundfloor": (
+                    ('wood', 1e-2),
+                    ('polystyrene', 30e-2),
+                    ("concrete", average_found_floor_thick)
+                ),
+                "levels": level_composition,
+            }
+
         except ValueError as e:
             pass
     
@@ -170,9 +214,9 @@ def structural_design(generated_structures, path, keep_sol=10):
     generated_structures = generated_structures.iloc[:keep_sol]
     material_quantities = {i:material_quantities[i] for i in range(keep_sol)}
 
-    return generated_structures, material_quantities
+    return generated_structures, material_quantities, floor_compositions
 
-def thermal_simulation(generated_structures, plot=False):
+def thermal_simulation(generated_structures, floor_compositions, plot=False):
 
     # Define context
     context_data: ContextData = ContextData(
@@ -226,18 +270,8 @@ def thermal_simulation(generated_structures, plot=False):
                     ('polystyrene', 15e-2),
                     ('concrete', 20e-2)
                 ),
-                'intermediate_floor': (
-                    ('plaster', 1e-2),
-                    ('polystyrene', 2e-2),
-                    ('concrete', 10e-2),
-                    ('polystyrene', 2e-2),
-                    ('plaster', 1e-2)
-                ),
-                'roof': (
-                    ('plaster', 13e-3),
-                    ('polystyrene', 15e-2),
-                    ('concrete', 15e-2)
-                ),
+                'intermediate_floor': floor_compositions[i]["levels"],
+                'roof': floor_compositions[i]["levels"],
                 'glazing': (
                     ('glass', 4e-3),
                     ('air', 8e-3),
@@ -245,11 +279,7 @@ def thermal_simulation(generated_structures, plot=False):
                     ('air', 8e-3),
                     ('glass', 4e-3)
                 ),
-                'ground_floor': (
-                    ('wood', 1e-2),
-                    ('polystyrene', 30e-2),
-                    ('concrete', 10e-2)
-                ),
+                'ground_floor': floor_compositions[i]["groundfloor"],
                 'basement_floor': (
                     ('concrete', 5e-2),
                     ('polystyrene', 30e-2),
@@ -471,7 +501,7 @@ def run_pipeline(
     # 2. Perform dimensioning and compute total material quantities
     print("Structural design and material quantities calculation")
     start_time = time.time()
-    generated_designs, material_quantities = structural_design(
+    generated_designs, material_quantities, floor_compos = structural_design(
         generated_designs, root_path, keep_sol=3
     )
     print(f"Structural design time = {time.time() - start_time}")
@@ -480,7 +510,7 @@ def run_pipeline(
     start_time = time.time()
     print("Performing thermal simulation")
     hvac_consumptions = thermal_simulation(
-        generated_designs, plot=True
+        generated_designs, floor_compos, plot=True
     )
     print(f"Thermal simulation time = {time.time() - start_time}")
 
