@@ -1,6 +1,7 @@
 {
     "parcel_length": 50.0,
     "parcel_width": 30.0,
+    "glazing_ratio": 0.15,
     "latitude_north_deg": 45.19160172269835,
     "longitude_east_deg": 5.717386779367178,
     "starting_stringdate" : "01/01/2023",

@@ -66,7 +66,7 @@ def generate_structures(
 
     return selected_solutions
 
-def structural_design(generated_structures, path, keep_sol=10):
+def structural_design(generated_structures, context, path, keep_sol=10):
 
     # Load db of pre-dimensioned structural elements
     structural_elements_db = StructuralElementsDB(
@@ -74,7 +74,8 @@ def structural_design(generated_structures, path, keep_sol=10):
     )
 
     # Iterate over each design proposed
-    material_quantities = {}
+    structure_material_quantities = {}
+    non_struct_mat_quantities = {}
     floor_compositions = {}
     for i in tqdm.tqdm(range(len(generated_structures))):
 
@@ -162,14 +163,41 @@ def structural_design(generated_structures, path, keep_sol=10):
             )
             structure.design()
             structure.compute_material_quantities()
-            material_quantities[i] = structure.material_quantities
+            structure_material_quantities[i] = structure.material_quantities
+
+            # Calculate material quantities for envelope and non-structural
+            # material for floors
+            envelope_total_surface = (
+                input_params["building_length"] + input_params["building_width"]
+            ) * input_params["column_height"] * input_params["nb_floors"] * 2
+            wall_surf = envelope_total_surface * (1-context["glazing_ratio"])
+            glazing_surf = envelope_total_surface * (context["glazing_ratio"])
+
+            # vertical surfaces (external walls and windows)
+            non_struct_mat_quantities[i] = {
+                "Plâtre (kg)": wall_surf * 13e-3 * 950,
+                "Polystyrène (kg)": wall_surf * 15e-2 * 25,
+                "Mur-Béton CEMII (kg)": wall_surf * 0.2 * 2400,
+                "Triple vitrage (m2)": glazing_surf,
+            }
+
+            # horizontal surfaces
+            groundfloor_surface = input_params["building_length"] \
+                * input_params["building_width"]
+            total_floor_surface = groundfloor_surface \
+                * (input_params["nb_floors"] + 1)
+            # levels
+            non_struct_mat_quantities[i]["Plâtre (kg)"] += total_floor_surface \
+                * 3e-2 * 950
+            non_struct_mat_quantities[i]["Polystyrène (kg)"] += \
+                total_floor_surface * 4e-2 * 25
 
             # Work out floor compositions
             average_floor_thick = np.mean(
-                [f.height for f in structure.all_floors.values()]
-            ).item()
-            average_found_floor_thick = np.mean(
-                [f.height for f in structure.all_foundation_floors.values()]
+                [
+                    f.height for f in list(structure.all_floors.values()) \
+                        + list(structure.all_foundation_floors.values())
+                ]
             ).item()
             if input_params["floor_material"] == "Coulee-En-Place":
                 level_composition = (
@@ -193,37 +221,44 @@ def structural_design(generated_structures, path, keep_sol=10):
                     ('plaster', 1e-2),
                     ('polystyrene', 2e-2),
                     ("concrete", average_floor_thick - 0.00075),
-                    ("stainless steel", 0.00075),
+                    ("steel", 0.00075),
                     ('polystyrene', 2e-2),
                     ('plaster', 1e-2)
                 )
-            floor_compositions[i] = {
-                "groundfloor": (
-                    ('wood', 1e-2),
-                    ('polystyrene', 30e-2),
-                    ("concrete", average_found_floor_thick)
-                ),
-                "levels": level_composition,
-            }
+            floor_compositions[i] = level_composition
 
         except ValueError as e:
             pass
-    
+
     # Remove failed designs from list of possible solutions, and renumber
     # objects
     generated_structures = generated_structures.iloc[
-        list(material_quantities.keys())
+        list(structure_material_quantities.keys())
     ].reset_index(drop=True)
-    material_quantities = {
-        i:material_quantities[sorted(list(material_quantities.keys()))[i]] \
-            for i in range(len(generated_structures))
+    structure_material_quantities = {
+        i:structure_material_quantities[
+            sorted(list(structure_material_quantities.keys()))[i]
+        ] for i in range(len(generated_structures))
+    }
+    non_struct_mat_quantities = {
+        i:non_struct_mat_quantities[
+            sorted(list(non_struct_mat_quantities.keys()))[i]
+        ] for i in range(len(generated_structures))
     }
 
     # Keep only the specified number of solutions
     generated_structures = generated_structures.iloc[:keep_sol]
-    material_quantities = {i:material_quantities[i] for i in range(keep_sol)}
+    structure_material_quantities = {
+        i:structure_material_quantities[i] for i in range(keep_sol)
+    }
+    non_struct_mat_quantities = {
+        i:non_struct_mat_quantities[i] for i in range(keep_sol)
+    }
 
-    return generated_structures, material_quantities, floor_compositions
+    return (
+        generated_structures, structure_material_quantities, \
+            non_struct_mat_quantities, floor_compositions
+    )
 
 def thermal_simulation(
         generated_structures, floor_compositions, context, plot=False
@@ -243,8 +278,8 @@ def thermal_simulation(
         side_masks=[
             SideMaskData(
                 x_center=v["x_center"], y_center=v["y_center"],
-                width=v["width"], height=v["height"],
-                elevation=v["elevation"], exposure_deg=v["exposure_deg"], slope_deg=v["slope_deg"],
+                width=v["width"], height=v["height"], elevation=v["elevation"],
+                exposure_deg=v["exposure_deg"], slope_deg=v["slope_deg"],
                 normal_rotation_angle_deg=v["normal_rotation_angle_deg"],
             ) for v in context["side_masks"].values()
         ]
@@ -263,7 +298,7 @@ def thermal_simulation(
             width=sample[5],
             n_floors=round(sample[3]),
             floor_height=2.5,
-            base_elevation=1.0,
+            base_elevation=0.1, # 10 cm
             z_rotation_angle_deg=.0,
             glazing_ratio=0.15,
             glazing_solar_factor=0.56,
@@ -273,8 +308,8 @@ def thermal_simulation(
                     ('polystyrene', 15e-2),
                     ('concrete', 20e-2)
                 ),
-                'intermediate_floor': floor_compositions[i]["levels"],
-                'roof': floor_compositions[i]["levels"],
+                'intermediate_floor': floor_compositions[i],
+                'roof': floor_compositions[i],
                 'glazing': (
                     ('glass', 4e-3),
                     ('air', 8e-3),
@@ -282,7 +317,7 @@ def thermal_simulation(
                     ('air', 8e-3),
                     ('glass', 4e-3)
                 ),
-                'ground_floor': floor_compositions[i]["groundfloor"],
+                'ground_floor': floor_compositions[i],
                 'basement_floor': (
                     ('concrete', 5e-2),
                     ('polystyrene', 30e-2),
@@ -412,19 +447,21 @@ def thermal_simulation(
 
     return hvac_consumptions
 
-def perform_lca(material_quantities, hvac_consumption, path):
+def perform_lca(
+        struct_mat_quantities, non_struct_mat_quant, hvac_consumption, path
+    ):
 
     INDICATORS = {
-        "('ReCiPe 2016 v1.03, midpoint (H)', 'climate change'," \
-            + " 'global warming potential (GWP1000)')" : "GWP100"
+        "('ecoinvent-3.9.1', 'ReCiPe 2016 v1.03, midpoint (H)', " \
+            + "'climate change', 'global warming potential (GWP100)')" : "GWP100"
     }
     
     # Perform LCA for each design
     lca_results = {}
-    for i in tqdm.tqdm(range(len(list(material_quantities.keys())))):
+    for i in tqdm.tqdm(range(len(list(struct_mat_quantities.keys())))):
         mc_lca = LCA(
-            i, material_quantities[i], hvac_consumption[i]["total"],
-            life_span=50
+            i, struct_mat_quantities[i], non_struct_mat_quant[i],
+            hvac_consumption[i]["total"], life_span=50
         )
         mc_lca.manual_MClca(
             path.joinpath("./data/prerun_lca/prerun_lca_MC10000.csv"),
@@ -437,22 +474,25 @@ def perform_lca(material_quantities, hvac_consumption, path):
     # Make LCA results df
     rows = []
     for num, res in lca_results.items():
-        embodied = res.get("embodied", {})
+        embodied_structure = res.get("embodied_structure", {})
+        embodied_non_structure = res.get("embodied_non_structure", {})
         operational = res.get("operational", {})
         total = res.get("total", {})
 
         for indicator in list(INDICATORS.keys()):
-            emb_list = embodied.get(indicator, [])
+            emb_struct_list = embodied_structure.get(indicator, [])
+            emb_nonstruct_list = embodied_non_structure.get(indicator, [])
             op_list = operational.get(indicator, [])
             tot_list = total.get(indicator, [])
-            n = max(len(emb_list), len(op_list), len(tot_list))
+            n = max(len(emb_struct_list), len(op_list), len(tot_list))
             for i in range(n):
                 rows.append(
                     {
                         "building_id": num,
                         "MC_run": i,
                         "indicator": INDICATORS[indicator],
-                        "embodied": emb_list[i] if i < len(emb_list) else None,
+                        "embodied_structure": emb_struct_list[i] if i < len(emb_struct_list) else None,
+                        "embodied_nonstruct": emb_nonstruct_list[i] if i < len(emb_nonstruct_list) else None,
                         "operational": op_list[i] if i < len(op_list) else None,
                         "total": tot_list[i] if i < len(tot_list) else None,
                     }
@@ -505,8 +545,9 @@ def run_pipeline(floor_target, max_gwp, root_path, n_sol):
     # 2. Perform dimensioning and compute total material quantities
     print("Structural design and material quantities calculation")
     start_time = time.time()
-    generated_designs, material_quantities, floor_compos = structural_design(
-        generated_designs, root_path, keep_sol=3
+    generated_designs, struct_mat_quantities, non_struct_mat_quantities,\
+        floor_compos = structural_design(
+            generated_designs, context, root_path, keep_sol=3
     )
     print(f"Structural design time = {time.time() - start_time}")
 
@@ -520,8 +561,11 @@ def run_pipeline(floor_target, max_gwp, root_path, n_sol):
 
     # 4. Compute LCA
     lca_results = perform_lca(
-        material_quantities, hvac_consumptions, root_path
+        struct_mat_quantities, non_struct_mat_quantities, hvac_consumptions,
+        root_path
     )
+
+    print(lca_results)
 
     # 5. Plot LCA results as histograms
     plot_lca_uncertainties(lca_results)
