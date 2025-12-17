@@ -3,5 +3,6 @@ data/ml_model/*
 data/predim_struct_elements/*
 data/prerun_lca/*
 data/lca_databases/*
+data/results/*
 venv/
 data.zip
