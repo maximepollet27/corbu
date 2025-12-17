@@ -5,6 +5,7 @@ import argparse
 import json
 from pathlib import Path
 from pprint import pprint
+from datetime import datetime
 import warnings
 warnings.filterwarnings("ignore")
 import seaborn as sns
@@ -32,7 +33,8 @@ def load_context(root_path, context_name="default_context.json"):
     return context
 
 def generate_structures(
-        parcel_length, parcel_width, floor_area_target, max_gwp, path, n_sol=15
+        parcel_length, parcel_width, floor_area_target, max_gwp, path,
+        results_folder, save_results=False, n_sol=15
     ):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -67,9 +69,19 @@ def generate_structures(
             selected_solutions["building_length"] * \
                 selected_solutions["nb_floors"]
 
+    if save_results:
+        selected_solutions.to_csv(
+            path.joinpath(
+                "./data/results/{:s}/raw_cvae_designs.csv".format(results_folder)
+            )
+        )
+
     return selected_solutions
 
-def structural_design(generated_structures, context, path, keep_sol=10):
+def structural_design(
+        generated_structures, context, path, results_folder, save_results=False,
+        keep_sol=10
+    ):
 
     # Load db of pre-dimensioned structural elements
     structural_elements_db = StructuralElementsDB(
@@ -258,10 +270,38 @@ def structural_design(generated_structures, context, path, keep_sol=10):
         i:non_struct_mat_quantities[i] for i in range(keep_sol)
     }
 
-    return (
-        generated_structures, structure_material_quantities, \
-            non_struct_mat_quantities, floor_compositions
-    )
+    # Store material quantities
+    if save_results:
+        generated_structures.to_csv(
+            path.joinpath(
+                "./data/results/{:s}/selected_designs.csv".format(results_folder)
+            )
+        )
+        with open(
+            path.joinpath(
+                "./data/results/{:s}/structure_material_quantities.json".format(
+                    results_folder
+                )
+            ),"w", encoding="utf-8"
+            ) as f:
+            json.dump(
+                structure_material_quantities, f, ensure_ascii=False, indent=2
+            )
+        with open(
+            path.joinpath(
+                "./data/results/{:s}/non_structure_material_quantities.json".format(
+                    results_folder
+                )
+            ), "w", encoding="utf-8"
+            ) as f:
+            json.dump(
+                non_struct_mat_quantities, f, ensure_ascii=False, indent=2
+            )
+
+        return (
+            generated_structures, structure_material_quantities, \
+                non_struct_mat_quantities, floor_compositions
+        )
 
 def thermal_simulation(
         generated_structures, floor_compositions, context, plot=False,
@@ -452,8 +492,8 @@ def thermal_simulation(
     return hvac_consumptions
 
 def thermal_simulation_parallel(
-        generated_structures, floor_compositions, context, plot=False, n_jobs=2,
-        verbose=False
+        generated_structures, floor_compositions, context, path, results_folder,
+        save_results=False, plot=False, n_jobs=2, verbose=False
     ):
 
     # Define context
@@ -531,8 +571,8 @@ def thermal_simulation_parallel(
                 initial_temperature=20,
                 heating_period=('1/11', '1/5'),
                 cooling_period=('1/5', '30/9'),
-                max_heating_power=8000,
-                max_cooling_power=8000,
+                max_heating_power=100000,
+                max_cooling_power=100000,
                 occupant_consumption=150,
                 body_PCO2=7,
                 density_occupants_per_100m2=7,
@@ -586,11 +626,24 @@ def thermal_simulation_parallel(
                 pass
 
     print(f"Completed {len(hvac_consumptions)} thermal simulation(s)")
-    
+
+    if save_results:
+        with open(
+            path.joinpath(
+                "./data/results/{:s}/hvac_consumptions.json".format(
+                    results_folder
+                )
+            ),"w", encoding="utf-8"
+            ) as f:
+            json.dump(
+                hvac_consumptions, f, ensure_ascii=False, indent=2
+            )
+
     return hvac_consumptions
 
 def perform_lca(
-        struct_mat_quantities, non_struct_mat_quant, hvac_consumption, path
+        struct_mat_quantities, non_struct_mat_quant, hvac_consumption, path,
+        results_folder, save_results=False
     ):
 
     INDICATORS = {
@@ -633,14 +686,26 @@ def perform_lca(
                         "building_id": num,
                         "MC_run": i,
                         "indicator": INDICATORS[indicator],
-                        "embodied_structure": emb_struct_list[i] if i < len(emb_struct_list) else None,
-                        "embodied_nonstruct": emb_nonstruct_list[i] if i < len(emb_nonstruct_list) else None,
+                        "embodied_structure": emb_struct_list[i] if i < len(
+                            emb_struct_list
+                        ) else None,
+                        "embodied_nonstruct": emb_nonstruct_list[i] if i < len(
+                            emb_nonstruct_list
+                        ) else None,
                         "operational": op_list[i] if i < len(op_list) else None,
                         "total": tot_list[i] if i < len(tot_list) else None,
                     }
                 )
+    
+    results_df = pd.DataFrame(rows)
 
-    return pd.DataFrame(rows)
+    if save_results:
+        results_df.to_csv(
+            path.joinpath(f"./data/results/{results_folder}/lca_results.csv"),
+            index=False
+        )
+
+    return results_df
 
 def plot_lca_uncertainties(df, indicator="GWP100", result_set="total"):
     subset = df[(df["indicator"] == indicator) & df[result_set].notna()].copy()
@@ -672,6 +737,10 @@ def plot_lca_uncertainties(df, indicator="GWP100", result_set="total"):
 
 def run_pipeline(floor_target, max_gwp, root_path, n_sol, n_jobs):
 
+    # Create results folder
+    folder_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    os.mkdir(root_path.joinpath("./data/results/{:s}".format(folder_name)))
+
     # 0. Load context
     context = load_context(root_path)
 
@@ -680,26 +749,19 @@ def run_pipeline(floor_target, max_gwp, root_path, n_sol, n_jobs):
     start_time = time.time()
     generated_designs = generate_structures(
         context["parcel_length"], context["parcel_width"], floor_target,
-        max_gwp, root_path, n_sol=n_sol * 2 # Generate more solutions than needed at first
+        max_gwp, root_path, folder_name, save_results=True, n_sol=n_sol * 2 # Generate more solutions than needed at first
     )
     print(f"Generation time = {time.time() - start_time}")
-
-    generated_designs.to_csv(
-        root_path.joinpath("./data/results/cvae_designs.csv"), index=False
-    )
 
     # 2. Perform dimensioning and compute total material quantities
     print("Structural design and material quantities calculation")
     start_time = time.time()
     generated_designs, struct_mat_quantities, non_struct_mat_quantities,\
         floor_compos = structural_design(
-            generated_designs, context, root_path, keep_sol=n_sol
+            generated_designs, context, root_path, folder_name,
+            save_results=True, keep_sol=n_sol
     )
     print(f"Structural design time = {time.time() - start_time}")
-
-    generated_designs.to_csv(
-        root_path.joinpath("./data/results/structure_designs.csv"), index=False
-    )
 
     # 3. Perform energy simulation for the 10 best structures
     start_time = time.time()
@@ -710,17 +772,16 @@ def run_pipeline(floor_target, max_gwp, root_path, n_sol, n_jobs):
         )
     else:
         hvac_consumptions = thermal_simulation_parallel(
-            generated_designs, floor_compos, context, plot=False, n_jobs=n_jobs
+            generated_designs, floor_compos, context, root_path, folder_name,
+            save_results=True, plot=False, n_jobs=n_jobs
         )
     
     print(f"Thermal simulation time = {time.time() - start_time}")
 
-
-
     # 4. Compute LCA
     lca_results = perform_lca(
         struct_mat_quantities, non_struct_mat_quantities, hvac_consumptions,
-        root_path
+        root_path, folder_name, save_results=True
     )
 
     print(lca_results)
