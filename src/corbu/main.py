@@ -1,3 +1,4 @@
+import os
 import tqdm
 import time
 import argparse
@@ -8,6 +9,7 @@ import warnings
 warnings.filterwarnings("ignore")
 import seaborn as sns
 import matplotlib.pyplot as plt
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # Batem
 from batem.core.data import DataProvider
@@ -18,6 +20,7 @@ from batem.core.inhabitants import Preference
 from cvae_generation import *
 from geometry import *
 from structure import *
+from thermal_simulation import _run_single_thermal_simulation
 from lca import *
 
 def load_context(root_path, context_name="default_context.json"):
@@ -261,7 +264,8 @@ def structural_design(generated_structures, context, path, keep_sol=10):
     )
 
 def thermal_simulation(
-        generated_structures, floor_compositions, context, plot=False
+        generated_structures, floor_compositions, context, plot=False,
+        verbose=False
     ):
 
     # Define context
@@ -294,8 +298,8 @@ def thermal_simulation(
 
         # define building
         building_data: BuildingData = BuildingData(
-            length=sample[4],
-            width=sample[5],
+            length=sample[5],
+            width=sample[4],
             n_floors=round(sample[3]),
             floor_height=2.5,
             base_elevation=0.1, # 10 cm
@@ -331,8 +335,8 @@ def thermal_simulation(
             initial_temperature=20,
             heating_period=('1/11', '1/5'),
             cooling_period=('1/5', '30/9'),
-            max_heating_power=8000,
-            max_cooling_power=8000,
+            max_heating_power=100000,
+            max_cooling_power=100000,
             occupant_consumption=150,
             body_PCO2=7,
             density_occupants_per_100m2=7,
@@ -342,7 +346,7 @@ def thermal_simulation(
             state_model_order_max=None,  # None means no reduction
             periodic_depth_seconds=3600,  # 1 hour for a 1h time step is a good compomize: it removes the higher dynamical behaviors
         )
-        
+
         # Perform simulation
         building: Building = Building(
             context_data=context_data, building_data=building_data
@@ -447,6 +451,144 @@ def thermal_simulation(
 
     return hvac_consumptions
 
+def thermal_simulation_parallel(
+        generated_structures, floor_compositions, context, plot=False, n_jobs=2,
+        verbose=False
+    ):
+
+    # Define context
+    context_data: ContextData = ContextData(
+        latitude_north_deg=context["latitude_north_deg"],
+        longitude_east_deg=context["longitude_east_deg"],
+        starting_stringdate=context["starting_stringdate"],
+        ending_stringdate=context["ending_stringdate"],
+        location=context["location"],
+        albedo=context["albedo"],
+        pollution=context["pollution"],
+        number_of_levels=context["number_of_levels"],
+        ground_temperature=context["ground_temperature"],
+        side_masks=[
+            SideMaskData(
+                x_center=v["x_center"], y_center=v["y_center"],
+                width=v["width"], height=v["height"], elevation=v["elevation"],
+                exposure_deg=v["exposure_deg"], slope_deg=v["slope_deg"],
+                normal_rotation_angle_deg=v["normal_rotation_angle_deg"],
+            ) for v in context["side_masks"].values()
+        ]
+    )
+
+    # Pre-load weather data by accessing it through ContextData
+    # This forces weather data to be loaded once before the loop
+    # Try multiple ways to access weather data depending on batem implementation
+    try:
+        # Method 1: Direct weather attribute
+        if hasattr(context_data, 'weather'):
+            _ = context_data.weather
+        # Method 2: Weather data provider
+        elif hasattr(context_data, 'weather_data'):
+            _ = context_data.weather_data
+        # Method 3: Access through a property that triggers loading
+        elif hasattr(context_data, '_weather'):
+            _ = context_data._weather
+        # Method 4: Create minimal building to trigger weather loading
+        elif len(generated_structures) > 0:
+            first_row = generated_structures.iloc[0]
+            dummy_building_data = BuildingData(
+                length=first_row['building_length'],
+                width=first_row['building_width'],
+                n_floors=round(first_row['nb_floors']),
+                floor_height=2.5,
+                base_elevation=1.0,
+                z_rotation_angle_deg=.0,
+                glazing_ratio=0.15,
+                glazing_solar_factor=0.56,
+                compositions={
+                    'wall': (
+                        ('plaster', 13e-3),
+                        ('polystyrene', 15e-2),
+                        ('concrete', 20e-2)
+                    ),
+                    'intermediate_floor': floor_compositions[0],
+                    'roof': floor_compositions[0],
+                    'glazing': (
+                        ('glass', 4e-3),
+                        ('air', 8e-3),
+                        ('glass', 4e-3),
+                        ('air', 8e-3),
+                        ('glass', 4e-3)
+                    ),
+                    'ground_floor': floor_compositions[0],
+                    'basement_floor': (
+                        ('concrete', 5e-2),
+                        ('polystyrene', 30e-2),
+                        ('concrete', 20e-2),
+                        ('gravels', 20e-2)
+                    ),
+                },
+                low_heating_setpoint=16,
+                normal_heating_setpoint=20,
+                normal_cooling_setpoint=24,
+                initial_temperature=20,
+                heating_period=('1/11', '1/5'),
+                cooling_period=('1/5', '30/9'),
+                max_heating_power=8000,
+                max_cooling_power=8000,
+                occupant_consumption=150,
+                body_PCO2=7,
+                density_occupants_per_100m2=7,
+                long_absence_period=('1/8', '15/8'),
+                regular_air_renewal_rate_vol_per_hour=1,
+                super_air_renewal_rate_vol_per_hour=None,
+                state_model_order_max=None,
+                periodic_depth_seconds=3600,
+            )
+            dummy_building = Building(
+                context_data=context_data, building_data=dummy_building_data
+            )
+            # Access a property that would trigger weather loading
+            if hasattr(dummy_building, 'context'):
+                _ = dummy_building.context
+            del dummy_building, dummy_building_data
+    except (AttributeError, Exception):
+        # Weather data loading might happen differently, continue anyway
+        # The context_data object should still be reused across iterations
+        pass
+
+    # Prepare arguments for parallel execution
+    tasks = [
+        (i, row.to_dict(), context_data, floor_compositions)
+        for i, (_, row) in enumerate(generated_structures.iterrows())
+    ]
+    
+    # Run simulations in parallel or sequentially
+    hvac_consumptions = {}
+    # Parallel execution using ProcessPoolExecutor
+    # Using processes for better CPU-bound performance
+    n_jobs = min(n_jobs, len(tasks), os.cpu_count() or 1)
+    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+        futures = {
+            executor.submit(_run_single_thermal_simulation, task): task[0]
+            for task in tasks
+        }
+
+        for future in tqdm.tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc="Thermal simulation"
+        ):
+            try:
+                i, result = future.result()
+                hvac_consumptions[i] = result
+            except Exception as e:
+                if verbose:
+                    print(f"Error in simulation {futures[future]}: {e}")
+                # Continue with other simulations
+                pass
+
+    print(f"Completed {len(hvac_consumptions)} thermal simulation(s)")
+    
+    return hvac_consumptions
+
 def perform_lca(
         struct_mat_quantities, non_struct_mat_quant, hvac_consumption, path
     ):
@@ -528,7 +670,7 @@ def plot_lca_uncertainties(df, indicator="GWP100", result_set="total"):
     plt.tight_layout()
     plt.show()
 
-def run_pipeline(floor_target, max_gwp, root_path, n_sol):
+def run_pipeline(floor_target, max_gwp, root_path, n_sol, n_jobs):
 
     # 0. Load context
     context = load_context(root_path)
@@ -542,22 +684,38 @@ def run_pipeline(floor_target, max_gwp, root_path, n_sol):
     )
     print(f"Generation time = {time.time() - start_time}")
 
+    generated_designs.to_csv(
+        root_path.joinpath("./data/results/cvae_designs.csv"), index=False
+    )
+
     # 2. Perform dimensioning and compute total material quantities
     print("Structural design and material quantities calculation")
     start_time = time.time()
     generated_designs, struct_mat_quantities, non_struct_mat_quantities,\
         floor_compos = structural_design(
-            generated_designs, context, root_path, keep_sol=3
+            generated_designs, context, root_path, keep_sol=n_sol
     )
     print(f"Structural design time = {time.time() - start_time}")
+
+    generated_designs.to_csv(
+        root_path.joinpath("./data/results/structure_designs.csv"), index=False
+    )
 
     # 3. Perform energy simulation for the 10 best structures
     start_time = time.time()
     print("Performing thermal simulation")
-    hvac_consumptions = thermal_simulation(
-        generated_designs, floor_compos, context, plot=True
-    )
+    if n_jobs != 1:
+        hvac_consumptions = thermal_simulation(
+            generated_designs, floor_compos, context, plot=False
+        )
+    else:
+        hvac_consumptions = thermal_simulation_parallel(
+            generated_designs, floor_compos, context, plot=False, n_jobs=n_jobs
+        )
+    
     print(f"Thermal simulation time = {time.time() - start_time}")
+
+
 
     # 4. Compute LCA
     lca_results = perform_lca(
@@ -577,13 +735,15 @@ def main():
     parser.add_argument("--floor_area", type=float, default=2000.)
     parser.add_argument("--max_gwp", type=float, default=200.)
     parser.add_argument("--n_solutions", type=int, default=3)
+    parser.add_argument("--n_jobs", type=int, default=1)
     args = parser.parse_args()
     FLOOR_AREA_TARGET = args.floor_area
     MAX_GWP = args.max_gwp
     N_SOL = args.n_solutions
+    N_JOBS = args.n_jobs
     ROOT_PATH = Path(__file__).resolve().parents[2]
 
-    results = run_pipeline(FLOOR_AREA_TARGET,MAX_GWP, ROOT_PATH, N_SOL)
+    results = run_pipeline(FLOOR_AREA_TARGET,MAX_GWP, ROOT_PATH, N_SOL, N_JOBS)
 
 if __name__ == "__main__":
     main()
