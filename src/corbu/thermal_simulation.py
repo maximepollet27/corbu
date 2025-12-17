@@ -65,6 +65,7 @@ def _run_single_thermal_simulation(args):
     # Perform simulation
     building = Building(context_data=context_data, building_data=building_data)
     dp = building.simulate(suffix='sim')
+    preference: Preference = Preference()
     
     total_energy_needs = 0
     cooling_energy_needs = 0
@@ -72,6 +73,8 @@ def _run_single_thermal_simulation(args):
     floor_surface = building.building_data.length * building.building_data.width
 
     # Single pass through floors - cache series data
+    avg_thermal_discomfort = 0.
+    num_floors = 0
     for floor in building.floors:
         phvac_key = f'PHVAC:{floor.name}#sim'
         if phvac_key in dp:
@@ -84,7 +87,16 @@ def _run_single_thermal_simulation(args):
             cooling_energy_needs += floor_cooling
             heating_energy_needs += floor_heating
 
+            avg_thermal_discomfort += preference.thermal_comfort_dissatisfaction(
+                dp.series(f'TZ_OP:{floor.name}#sim'),
+                dp.series(f'OCCUPANCY:{floor.name}'),
+                [dt.hour for dt in dp.datetimes]
+            ) * 100
+            num_floors += 1
+
+
     return i, {
+        'avg_thermal_discomfort': avg_thermal_discomfort/num_floors,
         'cooling': cooling_energy_needs/1000,
         'heating': heating_energy_needs/1000,
         'total': total_energy_needs/1000,
