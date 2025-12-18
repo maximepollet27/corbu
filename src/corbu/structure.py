@@ -3457,362 +3457,276 @@ class Structure:
             'Total': total_material_quantities
         }
     
-    def save_results(self):
-
-        # Save floors
-        all_floor_materials = list(
-            set(
-                key for floor in {
-                    **self.all_floors, **self.all_foundation_floors
-                }.values()
-                for key in floor.elements.keys()
+    def save_results(self, results_folder):
+        os.mkdir(
+            self.path.joinpath(
+                "./data/results/{:s}/designed_structure_{:d}".format(
+                    results_folder, self.id
+                )
             )
         )
+
+        # Prep floors df
         floor_data = {
-            'Structure id': [],
             'Floor id': [],
             'Typology': [],
             'Span (m)': [],
             'Width (m)': [],
             'Thickness (m)': [],
-            'G (kN/m2)': [],
-            'Q (kN/m2)': [],
-            'G superimposed (kN/m2)': [],
-            'G floor (kN/m2)': [],
-            'Location': [],
-            'Secondary beams?': [],
-            'Num. subfloors': [],
-            'Subfloor span (m)': [],
-            'Subfloor width (m)': [],
-            'Num. edge beams': [],
-            'Num. interior beams': [],
-            'Edge beam section': [],
-            'Interior beam section': [],
-            'G subfloor (kN/m2)': [],
-            'G edge beam (kN/ml)': [],
-            'G interior beam (kN/ml)': [],
+            'p1_x': [],
+            'p1_y': [],
+            'p1_z': [],
+            'p2_x': [],
+            'p2_y': [],
+            'p2_z': [],
+            'p3_x': [],
+            'p3_y': [],
+            'p3_z': [],
+            'p4_x': [],
+            'p4_y': [],
+            'p4_z': [],
         }
-        for mat in all_floor_materials:
-            floor_data[f'{mat} (kg)'] = []
         for floor_id, floor in self.all_floors.items():
-            floor_data['Structure id'].append(self.id)
             floor_data['Floor id'].append(floor.id)
             floor_data['Typology'].append(floor.typology)
             floor_data['Span (m)'].append(floor.span)
             floor_data['Width (m)'].append(floor.width)
             floor_data['Thickness (m)'].append(floor.height)
-            floor_data['G (kN/m2)'].append(floor.g)
-            floor_data['Q (kN/m2)'].append(floor.q)
-            floor_data['G superimposed (kN/m2)'].append(floor.g_superimposed)
-            floor_data['G floor (kN/m2)'].append(floor.g_floor)
-            floor_data['Secondary beams?'].append(floor.secondary_beams)
-            floor_data['Num. subfloors'].append(floor.num_subfloors)
-            floor_data['Subfloor span (m)'].append(floor.subfloor_span)
-            floor_data['Subfloor width (m)'].append(floor.subfloor_width)
-            floor_data['Num. edge beams'].append(floor.num_edge_beams)
-            floor_data['Num. interior beams'].append(floor.num_interior_beams)
-            floor_data['Edge beam section'].append(floor.edge_beam_section)
-            floor_data['Interior beam section'].append(
-                floor.interior_beam_section
-            )
-            floor_data['G subfloor (kN/m2)'].append(floor.g_subfloor)
-            floor_data['G edge beam (kN/ml)'].append(floor.g_edge_beam)
-            floor_data['G interior beam (kN/ml)'].append(floor.g_interior_beam)
-
-            if floor_id in self.roof_floors.keys():
-                floor_data['Location'].append('Roof')
-            else:
-                floor_data['Location'].append('Intermediate')
-            
-            for mat in all_floor_materials:
-                if mat in floor.elements:
-                    floor_data[mat + ' (kg)'].append(floor.elements[mat])
-                else:
-                    floor_data[mat + ' (kg)'].append(0)
-
-        # Foundation floors
-        # Save floors
-        for floor_id, floor in self.all_foundation_floors.items():
-            floor_data['Structure id'].append(self.id)
-            floor_data['Floor id'].append(floor.id)
-            floor_data['Typology'].append(floor.typology)
-            floor_data['Span (m)'].append(floor.span)
-            floor_data['Width (m)'].append(floor.width)
-            floor_data['Thickness (m)'].append(floor.height)
-            floor_data['G (kN/m2)'].append(floor.g)
-            floor_data['Q (kN/m2)'].append(floor.q)
-            floor_data['G superimposed (kN/m2)'].append(floor.g_superimposed)
-            floor_data['G floor (kN/m2)'].append(floor.g_floor)
-            floor_data['Location'].append('Foundation')
-            floor_data['Secondary beams?'].append(floor.secondary_beams)
-            floor_data['Num. subfloors'].append(floor.num_subfloors)
-            floor_data['Subfloor span (m)'].append(floor.subfloor_span)
-            floor_data['Subfloor width (m)'].append(floor.subfloor_width)
-            floor_data['Num. edge beams'].append(floor.num_edge_beams)
-            floor_data['Num. interior beams'].append(floor.num_interior_beams)
-            floor_data['Edge beam section'].append(floor.edge_beam_section)
-            floor_data['Interior beam section'].append(
-                floor.interior_beam_section
-            )
-            floor_data['G subfloor (kN/m2)'].append(floor.g_subfloor)
-            floor_data['G edge beam (kN/ml)'].append(floor.g_edge_beam)
-            floor_data['G interior beam (kN/ml)'].append(floor.g_interior_beam)
-
-            for mat in all_floor_materials:
-                if mat in floor.elements:
-                    floor_data[mat + ' (kg)'].append(floor.elements[mat])
-                else:
-                    floor_data[mat + ' (kg)'].append(0)
+            floor_data['p1_x'].append(self.all_nodes[floor.node_1].x)
+            floor_data['p1_y'].append(self.all_nodes[floor.node_1].y)
+            floor_data['p1_z'].append(self.all_nodes[floor.node_1].z)
+            floor_data['p2_x'].append(self.all_nodes[floor.node_2].x)
+            floor_data['p2_y'].append(self.all_nodes[floor.node_2].y)
+            floor_data['p2_z'].append(self.all_nodes[floor.node_2].z)
+            floor_data['p3_x'].append(self.all_nodes[floor.node_3].x)
+            floor_data['p3_y'].append(self.all_nodes[floor.node_3].y)
+            floor_data['p3_z'].append(self.all_nodes[floor.node_3].z)
+            floor_data['p4_x'].append(self.all_nodes[floor.node_4].x)
+            floor_data['p4_y'].append(self.all_nodes[floor.node_4].y)
+            floor_data['p4_z'].append(self.all_nodes[floor.node_4].z)
         floor_data = pd.DataFrame(floor_data)
-
-        # Save beams
+        
+        foundation_floor_data = {
+            'Floor id': [],
+            'Typology': [],
+            'Span (m)': [],
+            'Width (m)': [],
+            'Thickness (m)': [],
+            'p1_x': [],
+            'p1_y': [],
+            'p1_z': [],
+            'p2_x': [],
+            'p2_y': [],
+            'p2_z': [],
+            'p3_x': [],
+            'p3_y': [],
+            'p3_z': [],
+            'p4_x': [],
+            'p4_y': [],
+            'p4_z': [],
+        }
+        for floor_id, floor in self.all_foundation_floors.items():
+            foundation_floor_data['Floor id'].append(floor.id)
+            foundation_floor_data['Typology'].append(floor.typology)
+            foundation_floor_data['Span (m)'].append(floor.span)
+            foundation_floor_data['Width (m)'].append(floor.width)
+            foundation_floor_data['Thickness (m)'].append(floor.height)
+            foundation_floor_data['p1_x'].append(self.all_nodes[floor.node_1].x)
+            foundation_floor_data['p1_y'].append(self.all_nodes[floor.node_1].y)
+            foundation_floor_data['p1_z'].append(self.all_nodes[floor.node_1].z)
+            foundation_floor_data['p2_x'].append(self.all_nodes[floor.node_2].x)
+            foundation_floor_data['p2_y'].append(self.all_nodes[floor.node_2].y)
+            foundation_floor_data['p2_z'].append(self.all_nodes[floor.node_2].z)
+            foundation_floor_data['p3_x'].append(self.all_nodes[floor.node_3].x)
+            foundation_floor_data['p3_y'].append(self.all_nodes[floor.node_3].y)
+            foundation_floor_data['p3_z'].append(self.all_nodes[floor.node_3].z)
+            foundation_floor_data['p4_x'].append(self.all_nodes[floor.node_4].x)
+            foundation_floor_data['p4_y'].append(self.all_nodes[floor.node_4].y)
+            foundation_floor_data['p4_z'].append(self.all_nodes[floor.node_4].z)
+        foundation_floor_data = pd.DataFrame(foundation_floor_data)
+        
+        # Prep beams df
         beam_data = {
-            'Structure id': [],
             'Beam id': [],
             'Material type': [],
             'Length (m)': [],
             'Section (mm*mm)': [],
-            'G (kN/ml)': [],
-            'Q (kN/ml)': [],
-            'G superimposed (kN/ml)': [],
-            'G beam (kN/ml)': [],
-            'Location': []
+            'p1_x': [],
+            'p1_y': [],
+            'p1_z': [],
+            'p2_x': [],
+            'p2_y': [],
+            'p2_z': [],
         }
-        all_beam_materials = list(
-            set(
-                key for beam in {
-                    **self.all_beams, **self.all_foundation_beams
-                }.values()
-                for key in beam.elements.keys()
-            )
-        )
-        for mat in all_beam_materials:
-            beam_data[f'{mat} (kg)'] = []
         for beam_id, beam in self.all_beams.items():
-            beam_data['Structure id'].append(self.id)
             beam_data['Beam id'].append(beam.id)
             beam_data['Material type'].append(beam.material)
             beam_data['Length (m)'].append(beam.length)
             beam_data['Section (mm*mm)'].append(beam.section)
-            beam_data['G (kN/ml)'].append(beam.g)
-            beam_data['Q (kN/ml)'].append(beam.q)
-            beam_data['G superimposed (kN/ml)'].append(beam.g_superimposed)
-            beam_data['G beam (kN/ml)'].append(beam.g_beam)
-            if beam_id in self.roof_beams.keys():
-                beam_data['Location'].append('Roof')
-            else:
-                beam_data['Location'].append('Intermediate')
-
-            for mat in all_beam_materials:
-                if mat in beam.elements:
-                    beam_data[mat + ' (kg)'].append(beam.elements[mat])
-                else:
-                    beam_data[mat + ' (kg)'].append(0)
-        # Foundation beams
-        for beam_id, beam in self.all_foundation_beams.items():
-            beam_data['Structure id'].append(self.id)
-            beam_data['Beam id'].append(beam.id)
-            beam_data['Material type'].append(beam.material)
-            beam_data['Length (m)'].append(beam.length)
-            beam_data['Section (mm*mm)'].append(beam.section)
-            beam_data['G (kN/ml)'].append(beam.g)
-            beam_data['Q (kN/ml)'].append(beam.q)
-            beam_data['G superimposed (kN/ml)'].append(beam.g_superimposed)
-            beam_data['G beam (kN/ml)'].append(beam.g_beam)
-            beam_data['Location'].append('Foundation')
-
-            for mat in all_beam_materials:
-                if mat in beam.elements:
-                    beam_data[mat + ' (kg)'].append(beam.elements[mat])
-                else:
-                    beam_data[mat + ' (kg)'].append(0)
+            beam_data['p1_x'].append(self.all_nodes[beam.startpoint].x)
+            beam_data['p1_y'].append(self.all_nodes[beam.startpoint].y)
+            beam_data['p1_z'].append(self.all_nodes[beam.startpoint].z)
+            beam_data['p2_x'].append(self.all_nodes[beam.endpoint].x)
+            beam_data['p2_y'].append(self.all_nodes[beam.endpoint].y)
+            beam_data['p2_z'].append(self.all_nodes[beam.endpoint].z)
         beam_data = pd.DataFrame(beam_data)
 
-        # Save columns
+        foundation_beam_data = {
+            'Beam id': [],
+            'Material type': [],
+            'Length (m)': [],
+            'Section (mm*mm)': [],
+            'p1_x': [],
+            'p1_y': [],
+            'p1_z': [],
+            'p2_x': [],
+            'p2_y': [],
+            'p2_z': [],
+        }
+        for beam_id, beam in self.all_foundation_beams.items():
+            foundation_beam_data['Beam id'].append(beam.id)
+            foundation_beam_data['Material type'].append(beam.material)
+            foundation_beam_data['Length (m)'].append(beam.length)
+            foundation_beam_data['Section (mm*mm)'].append(beam.section)
+            foundation_beam_data['p1_x'].append(
+                self.all_nodes[beam.startpoint].x
+            )
+            foundation_beam_data['p1_y'].append(
+                self.all_nodes[beam.startpoint].y
+            )
+            foundation_beam_data['p1_z'].append(
+                self.all_nodes[beam.startpoint].z
+            )
+            foundation_beam_data['p2_x'].append(self.all_nodes[beam.endpoint].x)
+            foundation_beam_data['p2_y'].append(self.all_nodes[beam.endpoint].y)
+            foundation_beam_data['p2_z'].append(self.all_nodes[beam.endpoint].z)
+        foundation_beam_data = pd.DataFrame(foundation_beam_data)
+        
+        # Prep columns df
         column_data = {
-            'Structure id': [],
             'Column id': [],
             'Material type': [],
             'Length (m)': [],
             'Section (mm*mm)': [],
-            'N ULS (kN)': [],
-            'G (kN)': [],
-            'Q (kN)': [],
-            'Q reduced (kN)': [],
-            'G upper floors (kN)': [],
-            'Q upper floors (kN)': [],
-            'G level (kN)': [],
-            'Q level (kN)': [],
-            'G superimposed (kN)': [],
-            'G column (kN)': []
+            'p1_x': [],
+            'p1_y': [],
+            'p1_z': [],
+            'p2_x': [],
+            'p2_y': [],
+            'p2_z': [],
         }
-        all_column_materials = list(
-            set(
-                key for column in self.all_columns.values()
-                for key in column.elements.keys()
-            )
-        )
-        for mat in all_column_materials:
-            column_data[f'{mat} (kg)'] = []
         for column_id, column in self.all_columns.items():
-            column_data['Structure id'].append(self.id)
             column_data['Column id'].append(column.id)
             column_data['Material type'].append(column.material)
             column_data['Length (m)'].append(column.length)
             column_data['Section (mm*mm)'].append(column.section)
-            column_data['N ULS (kN)'].append(column.n_uls)
-            column_data['G (kN)'].append(column.g)
-            column_data['Q (kN)'].append(column.q)
-            column_data['Q reduced (kN)'].append(column.q_reduced)
-            column_data['G upper floors (kN)'].append(column.g_upper_floors)
-            column_data['Q upper floors (kN)'].append(column.q_upper_floors)
-            column_data['G level (kN)'].append(column.g_level)
-            column_data['Q level (kN)'].append(column.q_level)
-            column_data['G superimposed (kN)'].append(column.g_superimposed)
-            column_data['G column (kN)'].append(column.g_column)
-
-            for mat in all_column_materials:
-                if mat in column.elements:
-                    column_data[mat + ' (kg)'].append(column.elements[mat])
-                else:
-                    column_data[mat + ' (kg)'].append(0)
+            column_data['p1_x'].append(self.all_nodes[column.startpoint].x)
+            column_data['p1_y'].append(self.all_nodes[column.startpoint].y)
+            column_data['p1_z'].append(self.all_nodes[column.startpoint].z)
+            column_data['p2_x'].append(self.all_nodes[column.endpoint].x)
+            column_data['p2_y'].append(self.all_nodes[column.endpoint].y)
+            column_data['p2_z'].append(self.all_nodes[column.endpoint].z)
         column_data = pd.DataFrame(column_data)
         
         # Save walls
         wall_data = {
-            'Structure id': [],
             'Wall id': [],
             'Material type': [],
             'Length (m)': [],
             'Thickness (m)': [],
-            'G (kN/ml)': [],
-            'Q (kN/ml)': [],
-            'Q reduced (kN/ml)': [],
-            'G upper floors (kN/ml)': [],
-            'Q upper floors (kN/ml)': [],
-            'G level (kN/ml)': [],
-            'Q level (kN/ml)': [],
-            'G superimposed (kN/ml)': [],
-            'G wall (kN/ml)': []
+            'p1_x': [],
+            'p1_y': [],
+            'p1_z': [],
+            'p2_x': [],
+            'p2_y': [],
+            'p2_z': [],
+            'p3_x': [],
+            'p3_y': [],
+            'p3_z': [],
+            'p4_x': [],
+            'p4_y': [],
+            'p4_z': [],
         }
-        all_wall_materials = list(
-            set(
-                key for wall in self.all_walls.values()
-                for key in wall.elements.keys()
-            )
-        )
-        for mat in all_wall_materials:
-            wall_data[f'{mat} (kg)'] = []
         for wall_id, wall in self.all_walls.items():
-            wall_data['Structure id'].append(self.id)
             wall_data['Wall id'].append(wall.id)
             wall_data['Material type'].append(wall.material)
             wall_data['Length (m)'].append(wall.length)
             wall_data['Thickness (m)'].append(wall.thickness)
-            wall_data['G (kN/ml)'].append(wall.g)
-            wall_data['Q (kN/ml)'].append(wall.q)
-            wall_data['Q reduced (kN/ml)'].append(wall.q_reduced)
-            wall_data['G upper floors (kN/ml)'].append(wall.g_upper_floors)
-            wall_data['Q upper floors (kN/ml)'].append(wall.q_upper_floors)
-            wall_data['G level (kN/ml)'].append(wall.g_level)
-            wall_data['Q level (kN/ml)'].append(wall.q_level)
-            wall_data['G superimposed (kN/ml)'].append(wall.g_superimposed)
-            wall_data['G wall (kN/ml)'].append(wall.g_wall)
+            wall_data['p1_x'].append(self.all_nodes[wall.node_1].x)
+            wall_data['p1_y'].append(self.all_nodes[wall.node_1].y)
+            wall_data['p1_z'].append(self.all_nodes[wall.node_1].z)
+            wall_data['p2_x'].append(self.all_nodes[wall.node_2].x)
+            wall_data['p2_y'].append(self.all_nodes[wall.node_2].y)
+            wall_data['p2_z'].append(self.all_nodes[wall.node_2].z)
+            wall_data['p3_x'].append(self.all_nodes[wall.node_3].x)
+            wall_data['p3_y'].append(self.all_nodes[wall.node_3].y)
+            wall_data['p3_z'].append(self.all_nodes[wall.node_3].z)
+            wall_data['p4_x'].append(self.all_nodes[wall.node_4].x)
+            wall_data['p4_y'].append(self.all_nodes[wall.node_4].y)
+            wall_data['p4_z'].append(self.all_nodes[wall.node_4].z)
 
-            for mat in all_wall_materials:
-                if mat in wall.elements:
-                    wall_data[mat + ' (kg)'].append(wall.elements[mat])
-                else:
-                    wall_data[mat + ' (kg)'].append(0)
         wall_data = pd.DataFrame(wall_data)
-        
+
         # Save isolated footings
         isolated_footing_data = {
-            'Structure id': [],
             'Isolated footing id': [],
             'Ref. column': [],
-            'Width column (m)': [],
             'Width (m)': [],
             'Height (m)': [],
-            'N ULS (kN)': [],
-            'G upper floors (kN)': [],
-            'Q upper floors (kN)': [],
-            'G level (kN)': [],
-            'Q level (kN)': []
+            'p_x': [],
+            'p_y': [],
+            'p_z': [],
         }
-        all_isolated_footing_materials = list(
-            set(
-                key for isolated_footing in self.all_isolated_footings.values()
-                for key in isolated_footing.elements.keys()
-            )
-        )
-        for mat in all_isolated_footing_materials:
-            isolated_footing_data[f'{mat} (kg)'] = []
         for isolated_footing_id, isolated_footing \
             in self.all_isolated_footings.items():
-            isolated_footing_data['Structure id'].append(self.id)
             isolated_footing_data['Isolated footing id'].append(
                 isolated_footing.id
             )
             isolated_footing_data['Ref. column'].append(
                 isolated_footing.connected_column
             )
-            isolated_footing_data['Width column (m)'].append(
-                isolated_footing.width_column
-            )
             isolated_footing_data['Width (m)'].append(isolated_footing.width)
             isolated_footing_data['Height (m)'].append(isolated_footing.height)
-            isolated_footing_data['N ULS (kN)'].append(isolated_footing.n_axial)
-            isolated_footing_data['G upper floors (kN)'].append(
-                isolated_footing.g_upper_floors
+            isolated_footing_data['p_x'].append(
+                self.all_nodes[
+                    self.all_columns[
+                        isolated_footing.connected_column
+                    ].startpoint
+                ].x  
             )
-            isolated_footing_data['Q upper floors (kN)'].append(
-                isolated_footing.q_upper_floors
+            isolated_footing_data['p_y'].append(
+                self.all_nodes[
+                    self.all_columns[
+                        isolated_footing.connected_column
+                    ].startpoint
+                ].y
             )
-            isolated_footing_data['G level (kN)'].append(
-                isolated_footing.g_level
+            isolated_footing_data['p_z'].append(
+                self.all_nodes[
+                    self.all_columns[
+                        isolated_footing.connected_column
+                    ].startpoint
+                ].z
             )
-            isolated_footing_data['Q level (kN)'].append(
-                isolated_footing.q_level
-            )
-
-            for mat in all_isolated_footing_materials:
-                if mat in isolated_footing.elements:
-                    isolated_footing_data[mat + ' (kg)'].append(
-                        isolated_footing.elements[mat]
-                    )
-                else:
-                    isolated_footing_data[mat + ' (kg)'].append(0)
         isolated_footing_data = pd.DataFrame(isolated_footing_data)
 
         # Save continuous footings
         continuous_footing_data = {
-            'Structure id': [],
             'Continuous footing id': [],
             'Ref. wall': [],
             'Width wall (m)': [],
             'Length wall (m)': [],
             'Width (m)': [],
             'Height (m)': [],
-            'N axial (kN)': [],
-            'N ULS (kN/ml)': [],
-            'G upper floors (kN/ml)': [],
-            'Q upper floors (kN/ml)': [],
-            'G level (kN/ml)': [],
-            'Q level (kN/ml)': []
+            'p1_x': [],
+            'p1_y': [],
+            'p1_z': [],
+            'p2_x': [],
+            'p2_y': [],
+            'p2_z': [],
         }
-        all_continuous_footing_materials = list(
-            set(
-                key for continuous_footing in 
-                self.all_continuous_footings.values()
-                for key in continuous_footing.elements.keys()
-            )
-        )
-        for mat in all_continuous_footing_materials:
-            continuous_footing_data[f'{mat} (kg)'] = []
         for continuous_footing_id, continuous_footing \
             in self.all_continuous_footings.items():
-            continuous_footing_data['Structure id'].append(self.id)
             continuous_footing_data['Continuous footing id'].append(
                 continuous_footing.id
             )
@@ -3831,58 +3745,89 @@ class Structure:
             continuous_footing_data['Height (m)'].append(
                 continuous_footing.height
             )
-            continuous_footing_data['N axial (kN)'].append(
-                continuous_footing.n_axial
+            continuous_footing_data['p1_x'].append(
+                self.all_nodes[
+                    self.all_walls[
+                        continuous_footing.connected_wall
+                    ].node_1
+                ].x
             )
-            continuous_footing_data['N ULS (kN/ml)'].append(
-                continuous_footing.n_uls
+            continuous_footing_data['p1_y'].append(
+                self.all_nodes[
+                    self.all_walls[
+                        continuous_footing.connected_wall
+                    ].node_1
+                ].y
             )
-            continuous_footing_data['G upper floors (kN/ml)'].append(
-                continuous_footing.g_upper_floors
+            continuous_footing_data['p1_z'].append(
+                self.all_nodes[
+                    self.all_walls[
+                        continuous_footing.connected_wall
+                    ].node_1
+                ].z
             )
-            continuous_footing_data['Q upper floors (kN/ml)'].append(
-                continuous_footing.q_upper_floors
+            continuous_footing_data['p2_x'].append(
+                self.all_nodes[
+                    self.all_walls[
+                        continuous_footing.connected_wall
+                    ].node_2
+                ].x
             )
-            continuous_footing_data['G level (kN/ml)'].append(
-                continuous_footing.g_level
+            continuous_footing_data['p2_y'].append(
+                self.all_nodes[
+                    self.all_walls[
+                        continuous_footing.connected_wall
+                    ].node_2
+                ].y
             )
-            continuous_footing_data['Q level (kN/ml)'].append(
-                continuous_footing.q_level
+            continuous_footing_data['p2_z'].append(
+                self.all_nodes[
+                    self.all_walls[
+                        continuous_footing.connected_wall
+                    ].node_2
+                ].z
             )
 
-            for mat in all_continuous_footing_materials:
-                if mat in continuous_footing.elements:
-                    continuous_footing_data[mat + ' (kg)'].append(
-                        continuous_footing.elements[mat]
-                    )
-                else:
-                    continuous_footing_data[mat + ' (kg)'].append(0)
         continuous_footing_data = pd.DataFrame(continuous_footing_data)
 
-        # Save all results to parquet
-        try:
-            os.mkdir(self.path.joinpath('./design_results'))
-        except FileExistsError:
-            pass
-        to_dump = [
-            (floor_data,             'floors'),
-            (beam_data,              'beams'),
-            (column_data,            'columns'),
-            (wall_data,              'walls'),
-            (isolated_footing_data,  'isolated_footings'),
-            (continuous_footing_data,'continuous_footings'),
-        ]
-
-        for df, name in to_dump:
-            try:
-                os.mkdir(self.path.joinpath(f'./design_results/{name}'))
-            except FileExistsError:
-                pass
-            # print(df)
-            df = coerce_mixed_to_string(df)
-            df.to_parquet(
-                self.path.joinpath(
-                    f'./design_results/{name}/sample_{self.id}.parquet'
-                ),
-                index=False
-            )
+        # save all dfs
+        floor_data.to_csv(
+            self.path.joinpath(
+                f"./data/results/{results_folder}/designed_structure_{self.id}/floors.csv"
+            ), index=False
+        )
+        foundation_floor_data.to_csv(
+            self.path.joinpath(
+                f"./data/results/{results_folder}/designed_structure_{self.id}/foundation_floors.csv"
+            ), index=False
+        )
+        beam_data.to_csv(
+            self.path.joinpath(
+                f"./data/results/{results_folder}/designed_structure_{self.id}/beams.csv"
+            ), index=False
+        )
+        foundation_beam_data.to_csv(
+            self.path.joinpath(
+                f"./data/results/{results_folder}/designed_structure_{self.id}/foundation_beams.csv"
+            ), index=False
+        )
+        column_data.to_csv(
+            self.path.joinpath(
+                f"./data/results/{results_folder}/designed_structure_{self.id}/columns.csv"
+            ), index=False
+        )
+        wall_data.to_csv(
+            self.path.joinpath(
+                f"./data/results/{results_folder}/designed_structure_{self.id}/walls.csv"
+            ), index=False
+        )
+        isolated_footing_data.to_csv(
+            self.path.joinpath(
+                f"./data/results/{results_folder}/designed_structure_{self.id}/isolated_footings.csv"
+            ), index=False
+        )
+        continuous_footing_data.to_csv(
+            self.path.joinpath(
+                f"./data/results/{results_folder}/designed_structure_{self.id}/continuous_footings.csv"
+            ), index=False
+        )

@@ -92,6 +92,7 @@ def structural_design(
     structure_material_quantities = {}
     non_struct_mat_quantities = {}
     floor_compositions = {}
+    structures_dict = {}
     for i in tqdm.tqdm(range(len(generated_structures))):
 
         input_params = {
@@ -242,9 +243,11 @@ def structural_design(
                 )
             floor_compositions[i] = level_composition
 
+            structures_dict[i] = structure
+
         except ValueError as e:
             pass
-
+    
     # Remove failed designs from list of possible solutions, and renumber
     # objects
     generated_structures = generated_structures.iloc[
@@ -260,6 +263,11 @@ def structural_design(
             sorted(list(non_struct_mat_quantities.keys()))[i]
         ] for i in range(len(generated_structures))
     }
+    structures_dict = {
+        i:structures_dict[
+            sorted(list(structures_dict.keys()))[i]
+        ] for i in range(len(generated_structures))
+    }
 
     # Keep only the specified number of solutions
     generated_structures = generated_structures.iloc[:keep_sol]
@@ -269,14 +277,21 @@ def structural_design(
     non_struct_mat_quantities = {
         i:non_struct_mat_quantities[i] for i in range(keep_sol)
     }
+    structures_dict = {
+        i:structures_dict[i] for i in range(keep_sol)
+    }
 
     # Store material quantities
     if save_results:
+        # save selected designs
+        generated_structures.index.name = "structure_id"
         generated_structures.to_csv(
             path.joinpath(
                 "./data/results/{:s}/selected_designs.csv".format(results_folder)
             )
         )
+
+        # save material quantities
         with open(
             path.joinpath(
                 "./data/results/{:s}/structure_material_quantities.json".format(
@@ -297,11 +312,16 @@ def structural_design(
             json.dump(
                 non_struct_mat_quantities, f, ensure_ascii=False, indent=2
             )
+        
+        # Save detailed design information
+        for i, structure in structures_dict.items():
+            structure.id = i
+            structure.save_results(results_folder)
 
-        return (
-            generated_structures, structure_material_quantities, \
-                non_struct_mat_quantities, floor_compositions
-        )
+    return (
+        generated_structures, structure_material_quantities, \
+            non_struct_mat_quantities, floor_compositions
+    )
 
 def thermal_simulation(
         generated_structures, floor_compositions, context, plot=False,
@@ -762,6 +782,7 @@ def run_pipeline(floor_target, max_gwp, root_path, n_sol, n_jobs):
             save_results=True, keep_sol=n_sol
     )
     print(f"Structural design time = {time.time() - start_time}")
+    raise
 
     # 3. Perform energy simulation for the 10 best structures
     start_time = time.time()
